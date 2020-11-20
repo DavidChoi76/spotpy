@@ -249,7 +249,9 @@ class _algorithm(object):
         # If value is not None a timeout will set so that the simulation will break after sim_timeout seconds without return a value
         self.sim_timeout = sim_timeout
         self.save_threshold = save_threshold
-
+        
+        self._return_all_likes = False #allows multi-objective calibration if set to True, is set by the algorithm
+        
         if breakpoint == 'read' or breakpoint == 'readandwrite':
             print('Reading backupfile')
             try:
@@ -366,17 +368,19 @@ class _algorithm(object):
             Reason: In case of incomplete optimizations, old data can be restored. '''
         import pickle
         with open(dbname+'.break', 'rb') as breakfile:
-            work,backuptime,repos,obmin,obmax=pickle.load(breakfile)
+            work,backuptime,repos,obmin,obmax,pmin,pmax=pickle.load(breakfile)
             self.status.starttime=self.status.starttime-backuptime
             self.status.rep=repos
             self.status.objectivefunction_min=obmin
             self.status.objectivefunction_max=obmax
+            self.status.params_min=pmin
+            self.status.params_max=pmax
             return work
 
     def write_breakdata(self, dbname, work):
         ''' Write data to a pickle file if a breakpoint has been set.'''
         import pickle
-        work=(work,self.status.last_print-self.status.starttime,self.status.rep,self.status.objectivefunction_min,self.status.objectivefunction_max)
+        work=(work,self.status.last_print-self.status.starttime,self.status.rep,self.status.objectivefunction_min,self.status.objectivefunction_max,self.status.params_min,self.status.params_max)
         with open(str(dbname)+'.break', 'wb') as breakfile:
             pickle.dump(work, breakfile)
 
@@ -402,13 +406,16 @@ class _algorithm(object):
         # before they actually save the run in a database (e.g. sce-ua)
 
         self.status(like,params,block_print=block_print)
-        
         if save_run is True and simulation is not None:
             self.save(like, params, simulations=simulation, chains=chains)
-        if type(like)==type([]):
-            return like[0]
-        else:        
+        if self._return_all_likes:
             return like
+        else:
+            try:
+                iter(like)
+                return like[0]
+            except TypeError: # Happens if iter(like) fails, i.e. if like is just one value      
+                return like
 
     
     def getfitness(self, simulation, params):
